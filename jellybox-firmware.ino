@@ -157,6 +157,22 @@ void startWiFi(bool forcePortal) {
   wm.addParameter(wm_serverUrl);
   wm.addParameter(wm_apiKey);
 
+  // Suppress macOS Captive Network Assistant popup.
+  // WiFiManager's DNS server returns 192.168.4.1 for every domain, so macOS's
+  // probe to captive.apple.com/hotspot-detect.html hits this web server.
+  // Returning Apple's expected "Success" body makes macOS treat the network as
+  // having internet access and skip the CNA popup entirely.
+  wm.setWebServerCallback([&]() {
+    wm.server->on("/hotspot-detect.html", HTTP_GET, [&]() {
+      wm.server->send(200, "text/html",
+        "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>");
+    });
+    // Android / Chrome OS connectivity check
+    wm.server->on("/generate_204", HTTP_GET, [&]() {
+      wm.server->send(204, "text/plain", "");
+    });
+  });
+
   bool connected;
   if (forcePortal) {
     eink.showUnpaired();
