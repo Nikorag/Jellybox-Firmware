@@ -4,7 +4,7 @@
 
 // NeoPixel ring
 #define PIN_NEOPIXEL    27
-#define NEOPIXEL_COUNT  12
+#define NEOPIXEL_COUNT  16
 
 // PN532 NFC reader (I2C — SDA=21, SCL=22 are ESP32 defaults)
 #define PIN_PN532_IRQ   25

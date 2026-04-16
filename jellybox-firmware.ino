@@ -25,8 +25,6 @@
 #include "NFCReader.h"
 #include "APIClient.h"
 
-// ── Globals ───────────────────────────────────────────────────────────────
-
 LEDRing     led;
 EInkDisplay eink;
 NFCReader   nfc;
@@ -36,11 +34,11 @@ Preferences prefs;
 DeviceConfig cfg;
 
 enum class AppState {
-  UNCONFIGURED,   // no server URL / API key
-  CONNECTING,     // WiFi in progress
-  BOOTSTRAPPING,  // contacting /api/device/me
-  READY,          // idle, waiting for NFC scan
-  SCAN_MODE,      // capture-mode: next scan registers a new tag
+  UNCONFIGURED,
+  CONNECTING,
+  BOOTSTRAPPING,
+  READY,
+  SCAN_MODE,
 };
 AppState appState = AppState::UNCONFIGURED;
 
@@ -48,34 +46,24 @@ String        deviceName   = "";
 bool          nfcReady     = false;
 unsigned long lastBootstrap = 0;
 
-// Factory-reset button state
 unsigned long bootBtnStart = 0;
 bool          bootBtnHeld  = false;
 
-// WiFiManager custom parameter pointers (heap-allocated, deleted after portal)
 WiFiManagerParameter* wm_serverUrl = nullptr;
 WiFiManagerParameter* wm_apiKey    = nullptr;
-
-// ── NVS helpers ───────────────────────────────────────────────────────────
 
 void loadConfig() {
   prefs.begin(NVS_NAMESPACE, true);
   cfg.serverUrl = prefs.getString(NVS_KEY_SERVER, "");
   cfg.apiKey    = prefs.getString(NVS_KEY_APIKEY,  "");
   prefs.end();
-
-  // Strip trailing slash
-  if (cfg.serverUrl.endsWith("/")) {
+  if (cfg.serverUrl.endsWith("/"))
     cfg.serverUrl = cfg.serverUrl.substring(0, cfg.serverUrl.length() - 1);
-  }
 }
 
 void saveConfig(const String& serverUrl, const String& apiKey) {
   String su = serverUrl;
   if (su.endsWith("/")) su = su.substring(0, su.length() - 1);
-
-  // NVS is unencrypted by default. Enable NVS encryption in sdkconfig if
-  // protecting the API key at rest is required by the threat model.
   prefs.begin(NVS_NAMESPACE, false);
   prefs.putString(NVS_KEY_SERVER, su);
   prefs.putString(NVS_KEY_APIKEY,  apiKey);
@@ -88,26 +76,21 @@ void factoryReset() {
   prefs.begin(NVS_NAMESPACE, false);
   prefs.clear();
   prefs.end();
-  WiFi.disconnect(true, true);  // erase stored WiFi credentials
+  WiFi.disconnect(true, true);
   delay(300);
   ESP.restart();
 }
 
-// ── WiFiManager callback ──────────────────────────────────────────────────
-
-// Called when the user submits the config portal form
 void onPortalSave() {
   if (!wm_serverUrl || !wm_apiKey) return;
   String su = String(wm_serverUrl->getValue());
   String ak = String(wm_apiKey->getValue());
-  su.trim();
-  ak.trim();
+  su.trim(); ak.trim();
   saveConfig(su, ak);
   cfg.serverUrl = su;
   cfg.apiKey    = ak;
 }
 
-// Custom CSS for the captive portal — matches Jellybox dark theme
 static const char PORTAL_CSS[] PROGMEM = R"(
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -137,8 +120,6 @@ input[type=submit]:active{transform:scale(.98)}
 </style>
 )";
 
-// ── WiFi connection ───────────────────────────────────────────────────────
-
 void startWiFi(bool forcePortal) {
   WiFiManager wm;
   wm.setConnectTimeout(20);
@@ -147,120 +128,70 @@ void startWiFi(bool forcePortal) {
   wm.setCustomHeadElement(PORTAL_CSS);
   wm.setTitle("Jellybox Setup");
   wm.setShowInfoUpdate(false);
-
-  wm_serverUrl = new WiFiManagerParameter(
-    "server", "Server URL", cfg.serverUrl.c_str(), 128,
-    " placeholder=\"https://jellybox.example.com\"");
-  wm_apiKey = new WiFiManagerParameter(
-    "apikey", "API Key", cfg.apiKey.c_str(), 80,
-    " placeholder=\"jb_...\"");
+  wm_serverUrl = new WiFiManagerParameter("server", "Server URL", cfg.serverUrl.c_str(), 128, " placeholder=\"https://jellybox.example.com\"");
+  wm_apiKey    = new WiFiManagerParameter("apikey",  "API Key",    cfg.apiKey.c_str(),    80,  " placeholder=\"jb_...\"");
   wm.addParameter(wm_serverUrl);
   wm.addParameter(wm_apiKey);
-
-  // Suppress macOS Captive Network Assistant popup.
-  // WiFiManager's DNS server returns 192.168.4.1 for every domain, so macOS's
-  // probe to captive.apple.com/hotspot-detect.html hits this web server.
-  // Returning Apple's expected "Success" body makes macOS treat the network as
-  // having internet access and skip the CNA popup entirely.
   wm.setWebServerCallback([&]() {
     wm.server->on("/hotspot-detect.html", HTTP_GET, [&]() {
-      wm.server->send(200, "text/html",
-        "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>");
+      wm.server->send(200, "text/html", "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>");
     });
-    // Android / Chrome OS connectivity check
     wm.server->on("/generate_204", HTTP_GET, [&]() {
       wm.server->send(204, "text/plain", "");
     });
   });
-
-  bool connected;
-  if (forcePortal) {
-    eink.showUnpaired();
-    led.setState(LEDState::UNPAIRED);
-    led.setBaseState(LEDState::UNPAIRED);
-    connected = wm.startConfigPortal(WIFI_AP_NAME, WIFI_AP_PASSWORD);
-  } else {
-    connected = wm.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD);
-  }
-
-  delete wm_serverUrl;  wm_serverUrl = nullptr;
-  delete wm_apiKey;     wm_apiKey    = nullptr;
-
-  if (!connected) {
-    Serial.println("[WiFi] Connection failed — restarting");
-    delay(500);
-    ESP.restart();
-  }
-
+  bool connected = forcePortal
+    ? (eink.showUnpaired(), led.setState(LEDState::UNPAIRED), led.setBaseState(LEDState::UNPAIRED), wm.startConfigPortal(WIFI_AP_NAME, WIFI_AP_PASSWORD))
+    : wm.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD);
+  delete wm_serverUrl; wm_serverUrl = nullptr;
+  delete wm_apiKey;    wm_apiKey    = nullptr;
+  if (!connected) { Serial.println("[WiFi] Failed — restarting"); delay(500); ESP.restart(); }
   eink.showConnecting(WiFi.SSID());
   Serial.println("[WiFi] Connected to " + WiFi.SSID() + " — IP: " + WiFi.localIP().toString());
 }
 
-// ── Bootstrap ─────────────────────────────────────────────────────────────
-
 void doBootstrap() {
   led.setState(LEDState::BOOTSTRAPPING);
   led.setBaseState(LEDState::BOOTSTRAPPING);
-
   api.configure(cfg.serverUrl, cfg.apiKey);
   BootstrapResult res = api.bootstrap();
   lastBootstrap = millis();
-
   if (!res.ok) {
     if (res.httpCode == 401) {
-      Serial.println("[Boot] 401 — API key invalid or revoked");
-      eink.showUnpaired();
-      led.setState(LEDState::ERROR);
-      led.setBaseState(LEDState::UNPAIRED);
+      Serial.println("[Boot] 401 — invalid API key");
+      eink.showUnpaired(); led.setState(LEDState::ERROR); led.setBaseState(LEDState::UNPAIRED);
       appState = AppState::UNCONFIGURED;
     } else {
-      Serial.printf("[Boot] Network error (HTTP %d, WiFi status=%d) — retrying later\n",
-                    res.httpCode, WiFi.status());
-      if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[Boot] WiFi not connected — triggering reconnect");
-        WiFi.reconnect();
-      }
-      led.setState(LEDState::ERROR);
-      led.setBaseState(LEDState::IDLE);
+      Serial.printf("[Boot] Error HTTP %d — retrying later\n", res.httpCode);
+      if (WiFi.status() != WL_CONNECTED) WiFi.reconnect();
+      led.setState(LEDState::ERROR); led.setBaseState(LEDState::IDLE);
       if (deviceName.isEmpty()) eink.showConnecting();
       appState = AppState::READY;
     }
     return;
   }
-
   deviceName = res.name;
   Serial.println("[Boot] Device: " + deviceName + " scanMode=" + String(res.scanMode));
-
   if (res.scanMode) {
     appState = AppState::SCAN_MODE;
-    led.setBaseState(LEDState::SCAN_MODE);
-    led.setState(LEDState::SCAN_MODE);
+    led.setBaseState(LEDState::SCAN_MODE); led.setState(LEDState::SCAN_MODE);
     eink.showScanMode(deviceName);
   } else {
     appState = AppState::READY;
-    led.setBaseState(LEDState::IDLE);
-    led.setState(LEDState::IDLE);
+    led.setBaseState(LEDState::IDLE); led.setState(LEDState::IDLE);
     eink.showReady(deviceName);
-    checkCharging();  // immediately reflect charge state after transitioning to READY
+    checkCharging();
   }
 }
 
-// ── NFC scan handler ──────────────────────────────────────────────────────
-
 void handleScan(const String& uid) {
-  led.setState(LEDState::CONNECTING);
-  led.update();  // one frame of visual feedback — animation freezes during the blocking HTTP call
-
+  led.setState(LEDState::CONNECTING); led.update();
   PlayResult res = api.play(uid);
-
   if (res.ok) {
     led.setState(LEDState::SUCCESS);
     if (res.captured) {
       Serial.println("[Play] Tag captured: " + uid);
-      // Scan mode will be cleared on next bootstrap — just confirm on screen
-      eink.showReady(deviceName);
-      // Force a bootstrap so the device drops back to READY state quickly
-      lastBootstrap = 0;
+      eink.showReady(deviceName); lastBootstrap = 0;
     } else {
       Serial.println("[Play] Playing: " + res.content);
       eink.showLastPlayed(deviceName, res.content);
@@ -269,156 +200,71 @@ void handleScan(const String& uid) {
     Serial.println("[Play] Error: " + res.error);
     led.setState(LEDState::ERROR);
     eink.showError(res.error.isEmpty() ? "Play failed" : res.error);
-    // After 3 s restore the appropriate idle screen
     unsigned long wait = millis();
     while (millis() - wait < 3000) { led.update(); checkFactoryReset(); delay(10); }
-    if (appState == AppState::SCAN_MODE) {
-      eink.showScanMode(deviceName);
-    } else {
-      eink.showReady(deviceName);
-    }
+    appState == AppState::SCAN_MODE ? eink.showScanMode(deviceName) : eink.showReady(deviceName);
   }
 }
-
-// ── Charging indicator ────────────────────────────────────────────────────
-// Updates the LED base state to reflect TP4056 status. Only active in READY
-// state — UNPAIRED, SCAN_MODE, and transient animations take priority.
-// Tracks the previous result so setState() is only called on transitions,
-// avoiding a phase reset on every poll.
 
 void checkCharging() {
   if (appState != AppState::READY) return;
-
   bool charging = (digitalRead(PIN_CHRG)  == LOW);
   bool charged  = (digitalRead(PIN_STDBY) == LOW);
-
-  LEDState target = charging ? LEDState::CHARGING
-                  : charged  ? LEDState::CHARGED
-                  :             LEDState::IDLE;
-
+  LEDState target = charging ? LEDState::CHARGING : charged ? LEDState::CHARGED : LEDState::IDLE;
   static LEDState lastChargeState = LEDState::IDLE;
   if (target != lastChargeState) {
-    lastChargeState = target;
-    led.setState(target);
-    Serial.printf("[Charge] %s\n",
-      charging ? "charging" : charged ? "full" : "unplugged");
+    lastChargeState = target; led.setState(target);
+    Serial.printf("[Charge] %s\n", charging ? "charging" : charged ? "full" : "unplugged");
   }
 }
-
-// ── Factory reset check (call every loop iteration) ───────────────────────
 
 void checkFactoryReset() {
   if (digitalRead(PIN_FACTORY_RESET) == LOW) {
-    if (!bootBtnHeld) {
-      bootBtnHeld  = true;
-      bootBtnStart = millis();
-      Serial.println("[Reset] BOOT held...");
-    } else if (millis() - bootBtnStart > FACTORY_RESET_HOLD_MS) {
-      led.setState(LEDState::ERROR);
-      led.update();
-      eink.showUnpaired();
-      factoryReset();  // does not return
+    if (!bootBtnHeld) { bootBtnHeld = true; bootBtnStart = millis(); Serial.println("[Reset] BOOT held..."); }
+    else if (millis() - bootBtnStart > FACTORY_RESET_HOLD_MS) {
+      led.setState(LEDState::ERROR); led.update(); eink.showUnpaired(); factoryReset();
     }
-  } else {
-    bootBtnHeld = false;
-  }
+  } else { bootBtnHeld = false; }
 }
 
-// ── Setup ─────────────────────────────────────────────────────────────────
-
 void setup() {
-  Serial.begin(115200);
-  delay(100);
+  Serial.begin(115200); delay(100);
   Serial.println("\n\n=== Jellybox starting ===");
-
   pinMode(PIN_FACTORY_RESET, INPUT_PULLUP);
   pinMode(PIN_CHRG,          INPUT_PULLUP);
   pinMode(PIN_STDBY,         INPUT_PULLUP);
-
-  // Hardware init
-  led.begin();
-  led.setState(LEDState::CONNECTING);
-  led.update();
-
-  eink.begin();
-  eink.showSplash();
-  eink.showConnecting();
-
-  // Load saved config
+  led.begin(); led.setState(LEDState::CONNECTING); led.update();
+  eink.begin(); eink.showSplash(); eink.showConnecting();
   loadConfig();
-
-  // Check for factory reset (hold BOOT on power-up)
-  {
-    unsigned long holdStart = millis();
+  { unsigned long h = millis();
     while (digitalRead(PIN_FACTORY_RESET) == LOW) {
       led.update();
-      if (millis() - holdStart > FACTORY_RESET_HOLD_MS) {
-        Serial.println("[Reset] Factory reset triggered on boot");
-        led.setState(LEDState::ERROR);
-        led.update();
-        eink.showUnpaired();
-        factoryReset();  // does not return
-      }
+      if (millis() - h > FACTORY_RESET_HOLD_MS) { Serial.println("[Reset] Factory reset on boot"); led.setState(LEDState::ERROR); led.update(); eink.showUnpaired(); factoryReset(); }
       delay(10);
     }
   }
-
-  // Init NFC reader
   nfcReady = nfc.begin();
-  if (!nfcReady) {
-    Serial.println("[NFC] Reader not found — NFC disabled");
-  }
-
-  // Connect WiFi — show captive portal if no config yet
+  if (!nfcReady) Serial.println("[NFC] Reader not found — NFC disabled");
   bool needPortal = cfg.serverUrl.isEmpty() || cfg.apiKey.isEmpty();
   startWiFi(needPortal);
-
-  // Re-load in case the portal callback updated NVS
   loadConfig();
-
-  // If config still missing (user didn't complete portal), wait for reboot
   if (cfg.serverUrl.isEmpty() || cfg.apiKey.isEmpty()) {
-    Serial.println("[Config] Incomplete — waiting for factory reset or reboot");
-    eink.showUnpaired();
-    led.setBaseState(LEDState::UNPAIRED);
-    led.setState(LEDState::UNPAIRED);
-    while (true) {
-      led.update();
-      checkFactoryReset();
-      delay(10);
-    }
+    Serial.println("[Config] Incomplete — waiting for reset");
+    eink.showUnpaired(); led.setBaseState(LEDState::UNPAIRED); led.setState(LEDState::UNPAIRED);
+    while (true) { led.update(); checkFactoryReset(); delay(10); }
   }
-
   doBootstrap();
 }
-
-// ── Loop ──────────────────────────────────────────────────────────────────
 
 void loop() {
   checkFactoryReset();
   led.update();
-
-  // Periodic bootstrap poll to refresh device name and scan-mode state
-  if (millis() - lastBootstrap > BOOTSTRAP_INTERVAL_MS) {
-    doBootstrap();
-    return;
-  }
-
-  // Charging status — poll every 5 s, only updates LED on transitions
+  if (millis() - lastBootstrap > BOOTSTRAP_INTERVAL_MS) { doBootstrap(); return; }
   static unsigned long lastChargeCheck = 0;
-  if (millis() - lastChargeCheck > 5000) {
-    lastChargeCheck = millis();
-    checkCharging();
-  }
-
-  // NFC scan — only when idle or in scan-capture mode
-  if (nfcReady &&
-      (appState == AppState::READY || appState == AppState::SCAN_MODE)) {
+  if (millis() - lastChargeCheck > 5000) { lastChargeCheck = millis(); checkCharging(); }
+  if (nfcReady && (appState == AppState::READY || appState == AppState::SCAN_MODE)) {
     String uid = nfc.readUID();
-    if (uid.length() > 0) {
-      handleScan(uid);
-    }
+    if (uid.length() > 0) handleScan(uid);
   }
-
   delay(10);
 }

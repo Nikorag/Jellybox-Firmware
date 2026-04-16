@@ -161,6 +161,9 @@ IRQ           →   GPIO 25
 RST (RSTO)    →   GPIO 26
 ```
 
+> **VCC note:** connect to the ESP32's 3V3 pin. Most PN532 breakout boards accept 3.3 V directly
+> on their logic/VCC pin and run reliably at that voltage.
+
 ### Pull-ups
 
 The Adafruit PN532 breakout includes on-board 4.7 kΩ pull-ups on SDA and SCL — no external
