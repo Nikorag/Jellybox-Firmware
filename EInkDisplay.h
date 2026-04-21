@@ -21,7 +21,7 @@
 
 // Some panels have a hardware dead zone where the glass extends beyond the
 // active pixel area. Adjust EINK_MARGIN_R (pixels) if centred text appears
-// shifted right. 22px ≈ 5 mm on the Waveshare 2.9" V2.
+// shifted right. 35px ≈ 8 mm on the Waveshare 2.9" V2.
 #define EINK_MARGIN_L  0
 #define EINK_MARGIN_R  35
 
@@ -79,17 +79,16 @@ public:
     });
   }
 
+  // eInk persists after power-off, so the idle screen deliberately avoids
+  // any "ready"/"waiting" wording that would be misleading on a dead device.
+  // Shows the centred logo with the device name beneath it — visually
+  // indistinguishable between "powered and idle" and "powered off".
   void showReady(const String& name) {
     _draw([&]() {
       _clear();
-      // Logo on left, vertically centred
-      _display.drawBitmap(4, (EINK_H - JELLYBOX_LOGO_H) / 2,
-                          JELLYBOX_LOGO, JELLYBOX_LOGO_W, JELLYBOX_LOGO_H, GxEPD_BLACK);
-      // Device name + status centred in the right column
-      const int16_t RX = 82;
-      const int16_t RW = EINK_W - EINK_MARGIN_R - RX;
-      _centreIn(_trunc(name, 18).c_str(), &FreeMonoBold9pt7b, 62, RX, RW);
-      _centreIn("Ready to scan",          &FreeMono9pt7b,      84, RX, RW);
+      int16_t logoX = EINK_MARGIN_L + (EINK_W - EINK_MARGIN_L - EINK_MARGIN_R - JELLYBOX_LOGO_W) / 2;
+      _display.drawBitmap(logoX, 14, JELLYBOX_LOGO, JELLYBOX_LOGO_W, JELLYBOX_LOGO_H, GxEPD_BLACK);
+      _centre(_trunc(name, 22).c_str(), &FreeMonoBold9pt7b, 110);
     });
   }
 

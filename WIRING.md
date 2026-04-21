@@ -15,7 +15,7 @@ powers everything; the ESP32's onboard LDO steps that down to 3.3 V for the PN53
 | Battery | 18650 Li-Ion cell — see battery selection note below |
 | NFC reader | PN532 breakout (I2C mode) |
 | Display | Waveshare 2.9" V2 B/W eInk (296 × 128) |
-| LEDs | WS2812B NeoPixel ring — 12 pixels |
+| LEDs | WS2812B NeoPixel ring — 16 pixels |
 | Reset button | On-board BOOT button (GPIO0) |
 
 ---
@@ -206,7 +206,7 @@ GxEPD2 initialises the SPI bus internally — no `SPI.begin()` call is needed in
 
 ---
 
-## 5 — WS2812B NeoPixel Ring (12 pixels)
+## 5 — WS2812B NeoPixel Ring (16 pixels)
 
 ```
 NeoPixel ring        Power / ESP32

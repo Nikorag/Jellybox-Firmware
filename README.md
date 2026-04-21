@@ -17,7 +17,7 @@ This firmware talks to a [Jellybox Server](https://github.com/jamiebarltett/jell
 | MCU | ESP32 Dev Module (any board with GPIO0 BOOT button) |
 | NFC reader | PN532 breakout — I2C mode |
 | Display | Waveshare 2.9" V2 B/W eInk (296 × 128) |
-| LEDs | WS2812B NeoPixel ring — 12 pixels |
+| LEDs | WS2812B NeoPixel ring — 16 pixels |
 | Power | TP4056 with protection + boost converter (4-pad dual-function module) |
 | Battery | 18650 Li-Ion cell, 2500–3500 mAh |
 
@@ -85,7 +85,7 @@ You can also trigger a factory reset during power-up: hold BOOT while connecting
 
 ## LED States
 
-The 12-pixel NeoPixel ring indicates device state at a glance.
+The 16-pixel NeoPixel ring indicates device state at a glance.
 
 | Colour / pattern | Meaning |
 |---|---|
@@ -111,7 +111,7 @@ Charging states only show when the device is idle (READY). Scan-capture mode, er
 | Connecting… | WiFi connecting with no known network |
 | Connecting to `<SSID>` | After WiFi connects — shows the network name |
 | Unpaired — connect to Jellybox-Setup | No config stored, or API key rejected |
-| `<device name>` / Ready to scan | Idle, waiting for a tag |
+| Logo / `<device name>` | Idle, waiting for a tag (intentionally indistinguishable from power-off — eInk persists) |
 | `<device name>` / `[ SCAN MODE ]` | Scan-capture mode active |
 | `<device name>` / Now playing: `<title>` | Tag scanned, playback started |
 | Error: `<message>` | Something went wrong |
@@ -210,7 +210,7 @@ Adjust `EINK_W`, `EINK_H`, and `EINK_MARGIN_R` to match the new panel's pixel di
 Edit `Config.h`:
 ```cpp
 #define PIN_NEOPIXEL   27
-#define NEOPIXEL_COUNT 12
+#define NEOPIXEL_COUNT 16
 ```
 
 ### Adjusting poll intervals
