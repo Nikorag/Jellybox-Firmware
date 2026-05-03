@@ -76,6 +76,7 @@ public:
       } else {
         _centre("Connecting...", &FreeMono9pt7b, 75);
       }
+      _centre((String("fw ") + FIRMWARE_VERSION).c_str(), nullptr, 122);
     });
   }
 
@@ -123,6 +124,52 @@ public:
       _title("JELLYBOX");
       _divider(36);
       _centre("Error", &FreeMonoBold9pt7b, 68);
+      _centre(_trunc(msg, 30).c_str(), nullptr, 96);
+    });
+  }
+
+  // Initial OTA screen — shown once when the update starts.
+  void showUpdating(const String& fromVersion, const String& toVersion) {
+    _draw([&]() {
+      _clear();
+      _title("JELLYBOX");
+      _divider(36);
+      _centre("Updating firmware", &FreeMonoBold9pt7b, 60);
+      String arrow = _trunc(fromVersion, 10) + " -> " + _trunc(toVersion, 10);
+      _centre(arrow.c_str(), nullptr, 85);
+      _centre("Do not unplug", nullptr, 115);
+    });
+  }
+
+  // Progress bar update. eInk full refresh is ~1–2 s with a visible flash —
+  // callers must throttle (e.g. every 10 % or every few seconds), not call
+  // this on every byte received from httpUpdate.
+  void showUpdateProgress(int percent) {
+    if (percent < 0)   percent = 0;
+    if (percent > 100) percent = 100;
+    _draw([&]() {
+      _clear();
+      _title("JELLYBOX");
+      _divider(36);
+      _centre("Updating firmware", &FreeMonoBold9pt7b, 60);
+      int16_t barX = EINK_MARGIN_L + 20;
+      int16_t barW = EINK_W - EINK_MARGIN_L - EINK_MARGIN_R - 40;
+      int16_t barY = 80;
+      int16_t barH = 14;
+      _display.drawRect(barX, barY, barW, barH, GxEPD_BLACK);
+      int16_t fillW = (int16_t)((int32_t)(barW - 4) * percent / 100);
+      _display.fillRect(barX + 2, barY + 2, fillW, barH - 4, GxEPD_BLACK);
+      String pct = String(percent) + "%";
+      _centre(pct.c_str(), nullptr, 115);
+    });
+  }
+
+  void showUpdateFailed(const String& msg) {
+    _draw([&]() {
+      _clear();
+      _title("JELLYBOX");
+      _divider(36);
+      _centre("Update failed", &FreeMonoBold9pt7b, 68);
       _centre(_trunc(msg, 30).c_str(), nullptr, 96);
     });
   }

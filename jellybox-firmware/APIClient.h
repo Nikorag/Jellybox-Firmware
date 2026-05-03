@@ -11,6 +11,10 @@ struct BootstrapResult {
   String name;
   bool   scanMode = false;
   int    httpCode = 0;
+  // Latest firmware advertised by the server. Empty when the server hasn't
+  // populated `latestFirmware` yet — OTAUpdater treats empty as "no update".
+  String latestFirmwareVersion;
+  String latestFirmwareUrl;
 };
 
 // Result from POST /api/play
@@ -56,6 +60,11 @@ public:
       if (err == DeserializationError::Ok) {
         result.name     = doc["name"].as<String>();
         result.scanMode = doc["scanMode"] | false;
+        JsonObject fw = doc["latestFirmware"];
+        if (fw) {
+          result.latestFirmwareVersion = fw["version"] | "";
+          result.latestFirmwareUrl     = fw["url"]     | "";
+        }
         result.ok       = true;
       } else {
         Serial.println("[API] bootstrap JSON error: " + String(err.c_str()));

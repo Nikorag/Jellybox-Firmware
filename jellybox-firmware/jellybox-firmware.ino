@@ -24,6 +24,7 @@
 #include "EInkDisplay.h"
 #include "NFCReader.h"
 #include "APIClient.h"
+#include "OTAUpdater.h"
 
 LEDRing     led;
 EInkDisplay eink;
@@ -39,6 +40,7 @@ enum class AppState {
   BOOTSTRAPPING,
   READY,
   SCAN_MODE,
+  UPDATING,
 };
 AppState appState = AppState::UNCONFIGURED;
 
@@ -172,6 +174,34 @@ void doBootstrap() {
   }
   deviceName = res.name;
   Serial.println("[Boot] Device: " + deviceName + " scanMode=" + String(res.scanMode));
+
+  // First successful bootstrap proves the running firmware can talk to the
+  // network and the server — commit the partition so the bootloader doesn't
+  // roll it back on next reset. No-op on subsequent boots.
+  static bool firstBootstrapDone = false;
+  if (!firstBootstrapDone) {
+    firstBootstrapDone = true;
+    OTAUpdater::markCurrentAppValid();
+  }
+
+  // Server-driven OTA. If an update is available, this either reboots into
+  // the new firmware (success) or falls through and we resume normal flow
+  // — the same update will be retried on the next bootstrap.
+  if (OTAUpdater::isUpdateAvailable(res.latestFirmwareVersion)) {
+    Serial.printf("[OTA] Update available: %s -> %s\n",
+      FIRMWARE_VERSION, res.latestFirmwareVersion.c_str());
+    appState = AppState::UPDATING;
+    led.setState(LEDState::UPDATING);
+    led.setBaseState(LEDState::UPDATING);
+    eink.showUpdating(FIRMWARE_VERSION, res.latestFirmwareVersion);
+    if (!OTAUpdater::performUpdate(res.latestFirmwareUrl)) {
+      eink.showUpdateFailed("Update failed - will retry");
+      unsigned long wait = millis();
+      while (millis() - wait < 3000) { led.update(); checkFactoryReset(); delay(10); }
+    }
+    // On success the device has rebooted and we never get here.
+  }
+
   if (res.scanMode) {
     appState = AppState::SCAN_MODE;
     led.setBaseState(LEDState::SCAN_MODE); led.setState(LEDState::SCAN_MODE);
@@ -229,7 +259,7 @@ void checkFactoryReset() {
 
 void setup() {
   Serial.begin(115200); delay(100);
-  Serial.println("\n\n=== Jellybox starting ===");
+  Serial.printf("\n\n=== Jellybox starting (firmware %s) ===\n", FIRMWARE_VERSION);
   pinMode(PIN_FACTORY_RESET, INPUT_PULLUP);
   pinMode(PIN_CHRG,          INPUT_PULLUP);
   pinMode(PIN_STDBY,         INPUT_PULLUP);

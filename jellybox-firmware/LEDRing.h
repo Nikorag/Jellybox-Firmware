@@ -14,6 +14,7 @@ enum class LEDState {
   UNPAIRED,      // slow amber breathing — no config / 401 from server
   CHARGING,      // fast white breathing — battery charging
   CHARGED,       // slow green breathing — battery full
+  UPDATING,      // slow purple/blue pulse — OTA firmware update in progress
 };
 
 class LEDRing {
@@ -73,6 +74,7 @@ public:
       case LEDState::UNPAIRED:     _breathe(255, 110, 0);       break;  // amber, 4 s
       case LEDState::CHARGING:     _breathe(220, 220, 220, 120);break;  // white, fast (2.4 s)
       case LEDState::CHARGED:      _breathe(0, 200, 60,   300); break;  // green, slow (6 s)
+      case LEDState::UPDATING:     _spin(120, 60, 240);         break;  // violet comet
     }
 
     _strip.show();

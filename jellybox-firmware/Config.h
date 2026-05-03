@@ -1,5 +1,12 @@
 #pragma once
 
+// ── Firmware version ──────────────────────────────────────────────────────
+// Injected at build time via -DFIRMWARE_VERSION="vX.Y.Z" by the release
+// workflow. Falls back to "dev" for local Arduino IDE builds.
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "dev"
+#endif
+
 // ── Pin definitions ───────────────────────────────────────────────────────
 
 // NeoPixel ring

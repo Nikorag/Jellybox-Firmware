@@ -44,8 +44,9 @@ Install all of these via **Arduino IDE → Tools → Manage Libraries**:
 
 1. Open `jellybox-firmware.ino` in Arduino IDE
 2. Set board: **Tools → Board → ESP32 Dev Module**
-3. Set partition scheme: **Tools → Partition Scheme → Huge APP (3MB No OTA/1MB SPIFFS)**
+3. Set partition scheme: **Tools → Partition Scheme → Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)**
    - The default 1.2 MB partition is too small for TLS + all libraries
+   - This scheme provides two app partitions, which is required for OTA updates. If you flash with `Huge APP` instead, the device will work but will not be able to auto-update.
 4. Select the correct port under **Tools → Port**
 5. Click **Upload**
 
@@ -226,7 +227,7 @@ Also in `Config.h`:
 
 ## Stored Configuration (NVS)
 
-Config is stored in the ESP32's Non-Volatile Storage under the `jellybox` namespace. The partition scheme change (`Huge APP`) does not affect NVS — it is a separate partition and survives reflashing.
+Config is stored in the ESP32's Non-Volatile Storage under the `jellybox` namespace. The partition scheme change (`Minimal SPIFFS`) does not affect NVS — it is a separate partition and survives reflashing.
 
 | Key | Value |
 |---|---|
