@@ -65,22 +65,22 @@ jobs:
           VERSION="${GITHUB_REF_NAME:-dev}"
           cd build
           for f in jellybox-firmware.ino.*; do
-            ext="${f##*.}"
-            mv "$f" "jellybox-firmware-${VERSION}.${ext}"
+            suffix="${f#jellybox-firmware.ino.}"
+            mv "$f" "jellybox-firmware-${VERSION}.${suffix}"
           done
           ls -la
 
       - name: Generate release manifest
         run: |
           VERSION="${GITHUB_REF_NAME:-dev}"
-          BIN_FILE="build/jellybox-firmware-${VERSION}.ino.bin"
+          BIN_FILE="build/jellybox-firmware-${VERSION}.bin"
           SHA256=$(sha256sum "$BIN_FILE" | awk '{print $1}')
           SIZE=$(stat -c '%s' "$BIN_FILE")
           
           cat > build/manifest.json <<EOF
           {
             "version": "${VERSION}",
-            "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/jellybox-firmware-${VERSION}.ino.bin",
+            "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/jellybox-firmware-${VERSION}.bin",
             "sha256": "${SHA256}",
             "size": ${SIZE},
             "released_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
