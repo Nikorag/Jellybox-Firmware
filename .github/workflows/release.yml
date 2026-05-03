@@ -39,7 +39,7 @@ jobs:
             --fqbn esp32:esp32:esp32:PartitionScheme=huge_app \
             --output-dir build \
             --export-binaries \
-            ./jellybox-firmware.ino
+            ./jellybox-firmware
 
       - name: Rename artifacts
         run: |
