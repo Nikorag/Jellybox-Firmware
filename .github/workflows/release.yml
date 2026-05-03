@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # needed to create releases and upload assets
+  contents: write
 
 jobs:
   build:
@@ -38,11 +38,27 @@ jobs:
       - name: Compile firmware
         run: |
           mkdir -p build
+          VERSION="${GITHUB_REF_NAME:-dev}"
           arduino-cli compile \
-            --fqbn esp32:esp32:esp32:PartitionScheme=huge_app \
+            --fqbn esp32:esp32:esp32:PartitionScheme=min_spiffs \
             --output-dir build \
             --export-binaries \
+            --build-property "build.extra_flags=-DFIRMWARE_VERSION=\"${VERSION}\" -DESP32" \
             ./jellybox-firmware
+
+      - name: Check OTA partition fit
+        run: |
+          SIZE=$(stat -c '%s' build/jellybox-firmware.ino.bin)
+          MAX=1966080
+          PCT=$((SIZE * 100 / MAX))
+          echo "Binary: $SIZE bytes ($PCT% of OTA partition)"
+          if [ $SIZE -gt $MAX ]; then
+            echo "::error::Binary ($SIZE bytes) exceeds OTA partition size ($MAX bytes)!"
+            exit 1
+          fi
+          if [ $PCT -gt 85 ]; then
+            echo "::warning::Binary is over 85% of OTA partition — consider a custom partition scheme"
+          fi
 
       - name: Rename artifacts
         run: |
@@ -54,6 +70,24 @@ jobs:
           done
           ls -la
 
+      - name: Generate release manifest
+        run: |
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          BIN_FILE="build/jellybox-firmware-${VERSION}.ino.bin"
+          SHA256=$(sha256sum "$BIN_FILE" | awk '{print $1}')
+          SIZE=$(stat -c '%s' "$BIN_FILE")
+          
+          cat > build/manifest.json <<EOF
+          {
+            "version": "${VERSION}",
+            "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/jellybox-firmware-${VERSION}.ino.bin",
+            "sha256": "${SHA256}",
+            "size": ${SIZE},
+            "released_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          cat build/manifest.json
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -61,8 +95,7 @@ jobs:
           path: |
             build/*.bin
             build/*.elf
-            build/*.bootloader.bin
-            build/*.partitions.bin
+            build/manifest.json
 
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -71,5 +104,6 @@ jobs:
           files: |
             build/*.bin
             build/*.elf
+            build/manifest.json
           generate_release_notes: true
 
