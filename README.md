@@ -84,6 +84,39 @@ You can also trigger a factory reset during power-up: hold BOOT while connecting
 
 ---
 
+## Over-the-Air Updates
+
+The device updates itself automatically. New firmware is published as a GitHub Release, the Jellybox Server picks up the manifest, and devices download and flash the new image on their next bootstrap (every 30 s).
+
+**How it works**
+
+1. Each release tag (e.g. `v0.1.0`) triggers the GitHub Actions workflow in `.github/workflows/release.yml`. The workflow builds the firmware with the version baked in (`-DFIRMWARE_VERSION="v0.1.0"`), publishes a release with the `.bin` plus a `manifest.json`.
+2. The Jellybox Server fetches that manifest periodically and includes a `latestFirmware: { version, url }` block in every `GET /api/device/me` response.
+3. When the device sees a `version` that doesn't match its compiled-in `FIRMWARE_VERSION`, it shows the "Updating firmware" screen, downloads the binary directly from GitHub, flashes it, and reboots into the new image.
+
+**Rollback safety**
+
+Freshly flashed firmware is marked `PENDING_VERIFY` by the bootloader. The new image only commits itself once it has successfully reached the server (`[OTA] Marking current image valid` in the serial log). If the new firmware fails to connect, crashes, or hits a watchdog reset before that point, the bootloader rolls back to the previous working partition automatically. No bricked devices, no manual intervention.
+
+**Local builds never auto-update**
+
+Arduino IDE builds compile with `FIRMWARE_VERSION="dev"`. The OTA check short-circuits on `"dev"`, so a device flashed from your laptop will never overwrite your work-in-progress with a release build.
+
+**Required partition scheme**
+
+OTA needs two app partitions, which is why the build flag `Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)` is mandatory. Devices flashed with `Huge APP` will work but cannot auto-update — they'll need a USB reflash to pick up the OTA-capable partition table.
+
+**Releasing a new version**
+
+```bash
+git tag v0.1.0
+git push --tags
+```
+
+The workflow does the rest. Watch the Actions tab for the build, and the Releases tab for the published artifacts.
+
+---
+
 ## LED States
 
 The 16-pixel NeoPixel ring indicates device state at a glance.
@@ -99,6 +132,7 @@ The 16-pixel NeoPixel ring indicates device state at a glance.
 | Amber breathing | Unpaired — no config, or API key rejected (401) |
 | Fast white breathing | Charging — battery is charging via USB |
 | Slow green breathing | Charged — battery is full |
+| Violet spin (comet) | Updating firmware — OTA download in progress |
 
 Charging states only show when the device is idle (READY). Scan-capture mode, errors, and success flashes take priority.
 
@@ -116,6 +150,9 @@ Charging states only show when the device is idle (READY). Scan-capture mode, er
 | `<device name>` / `[ SCAN MODE ]` | Scan-capture mode active |
 | `<device name>` / Now playing: `<title>` | Tag scanned, playback started |
 | Error: `<message>` | Something went wrong |
+| Updating firmware / `<old> -> <new>` / Do not unplug | OTA update starting |
+| Updating firmware / progress bar / `XX%` | OTA download in progress |
+| Update failed / `<error>` | OTA download failed — device retries on next bootstrap |
 
 ---
 
@@ -130,7 +167,9 @@ Charging states only show when the device is idle (READY). Scan-capture mode, er
 | `JellyboxLogo.h` | 72×72 px PROGMEM bitmap for the splash / ready screens |
 | `NFCReader.h` | PN532 I2C wrapper with UID debounce |
 | `APIClient.h` | HTTPS client for `/api/device/me` and `/api/play` |
+| `OTAUpdater.h` | OTA firmware download, install, and rollback-commit logic |
 | `WIRING.md` | Full hardware wiring guide, pinout, and power budget |
+| `.github/workflows/release.yml` | CI that builds firmware on `v*` tags and publishes a manifest for OTA |
 
 ---
 
@@ -162,6 +201,10 @@ Charging states only show when the device is idle (READY). Scan-capture mode, er
              │       └────────┬────────┘
              │                │ POST /api/play
              └────────────────┘ (re-bootstrap every 30 s)
+
+   BOOTSTRAPPING ──► UPDATING ──► reboot into new firmware
+                       │ (only if latestFirmware.version != FIRMWARE_VERSION)
+                       └► back to BOOTSTRAPPING on download failure
 ```
 
 ---
@@ -173,9 +216,16 @@ The firmware makes two HTTPS calls to the server:
 **`GET /api/device/me`** — called at boot and every 30 seconds  
 Authenticated with `Authorization: Bearer <apiKey>`. Returns:
 ```json
-{ "name": "Living Room Box", "scanMode": false }
+{
+  "name": "Living Room Box",
+  "scanMode": false,
+  "latestFirmware": {
+    "version": "v0.1.0",
+    "url": "https://github.com/.../jellybox-firmware-v0.1.0.bin"
+  }
+}
 ```
-A `401` response sets the device to UNPAIRED state. Other errors are retried on the next interval.
+A `401` response sets the device to UNPAIRED state. Other errors are retried on the next interval. The `latestFirmware` block is optional — if absent, no update is attempted. See the [OTA section](#over-the-air-updates) for the full update flow.
 
 **`POST /api/play`** — called when a tag is scanned  
 ```json
@@ -249,7 +299,11 @@ Connect at **115200 baud**. All state transitions, NFC scans, API calls, and err
 [Boot]   Device: Living Room Box scanMode=0
 [Charge] charging
 [Reset]  BOOT held...
+[OTA]    Update available: v0.0.3 -> v0.1.0
+[OTA]    Marking current image valid (was pending verify)
 ```
+
+The boot banner also reports the running firmware version, e.g. `=== Jellybox starting (firmware v0.1.0) ===` (or `firmware dev` for local builds).
 
 ---
 
