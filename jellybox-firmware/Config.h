@@ -27,11 +27,6 @@
 // BOOT/GPIO0 button — hold on power-up to factory reset
 #define PIN_FACTORY_RESET 0
 
-// TP4056 charging status — solder to LED cathode pads on the TP4056 module
-// Both are open-drain, active LOW; use INPUT_PULLUP on the ESP32 side.
-#define PIN_CHRG   32   // LOW while battery is charging
-#define PIN_STDBY  33   // LOW when charge is complete (battery full)
-
 // ── WiFi / captive portal ─────────────────────────────────────────────────
 #define WIFI_AP_NAME        "Jellybox-Setup"
 #define WIFI_AP_PASSWORD    ""          // open AP

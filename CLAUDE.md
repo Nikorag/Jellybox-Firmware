@@ -31,11 +31,9 @@ The server is authoritative for scan-mode vs. play-mode — the firmware never d
 
 **Config lifecycle.** `DeviceConfig` (`serverUrl`, `apiKey`) lives in NVS under the `jellybox` namespace. WiFi creds live separately in the ESP32 WiFi stack. `factoryReset()` clears both (`prefs.clear()` + `WiFi.disconnect(true, true)`) and reboots. The captive portal's `onPortalSave` callback writes to NVS — `loadConfig()` is called again after `startWiFi()` to pick up values set by the portal.
 
-**Config portal / captive-portal detection.** `startWiFi()` registers handlers for `/hotspot-detect.html` (iOS/macOS) and `/generate_204` (Android) so phones auto-open the portal. `PORTAL_CSS` is a dark-theme stylesheet injected via `setCustomHeadElement` — match its palette if you add new portal pages.
+**Config portal / captive-portal detection.** `startWiFi()` registers handlers for `/hotspot-detect.html` (iOS/macOS) and `/generate_204` (Android) so phones auto-open the portal. The portal uses WiFiManager's default styling — config is normally set via the website POSTing directly to `192.168.1.4`, so the portal UI is a rarely-seen fallback and isn't worth the flash cost of custom CSS.
 
 **eInk panel swap.** To change display, edit the include and `using Panel = ...` alias at the top of `EInkDisplay.h`, then adjust `EINK_W`, `EINK_H`, `EINK_MARGIN_R` (the right-side dead zone varies per panel). All draw methods use full-window paged refresh; switching `showLastPlayed` to `setPartialWindow` would remove the full-screen flash on every scan (noted in the file).
-
-**Charge detection.** `PIN_CHRG`/`PIN_STDBY` are `INPUT_PULLUP` reading the TP4056 LED cathode pads (active-LOW, open-drain). `checkCharging()` only updates the LED when `appState == READY` so it never overrides `SCAN_MODE` / flash states. Ticked every 5 s from `loop()`.
 
 ## Gotchas
 

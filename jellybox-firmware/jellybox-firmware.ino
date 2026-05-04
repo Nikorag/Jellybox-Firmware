@@ -93,41 +93,11 @@ void onPortalSave() {
   cfg.apiKey    = ak;
 }
 
-static const char PORTAL_CSS[] PROGMEM = R"(
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:#121214;color:#e5e7eb;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
-.wrap{max-width:380px;margin:40px auto;padding:0 20px}
-h1{font-size:1.6rem;font-weight:700;color:#f9fafb;text-align:center;letter-spacing:.08em;margin-bottom:4px}
-h2,.info{font-size:.8rem;color:#6b7280;text-align:center;font-weight:400;margin-bottom:28px}
-form,fieldset{background:#1c1c1f;border:1px solid #27272a;border-radius:14px;padding:24px}
-fieldset{margin-top:20px;border-top-color:#27272a}
-legend{font-size:.7rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;padding:0 6px;margin-left:-6px}
-label{display:block;font-size:.75rem;font-weight:500;color:#9ca3af;margin-bottom:6px;margin-top:16px}
-input[type=text],input[type=password],input[type=search]{
-  width:100%;background:#0d0d10;border:1px solid #3f3f46;border-radius:8px;
-  color:#f9fafb;font-size:.875rem;padding:10px 13px;outline:none;
-  transition:border-color .15s,box-shadow .15s}
-input:focus{border-color:#7c3aed;box-shadow:0 0 0 3px rgba(124,58,237,.2)}
-::placeholder{color:#52525b}
-br{display:none}
-input[type=submit]{
-  display:block;width:100%;margin-top:22px;
-  background:#7c3aed;color:#fff;border:none;border-radius:9px;
-  font-size:.875rem;font-weight:600;padding:12px;cursor:pointer;
-  transition:background .15s,transform .1s}
-input[type=submit]:hover{background:#6d28d9}
-input[type=submit]:active{transform:scale(.98)}
-.msg{font-size:.72rem;color:#6b7280;text-align:center;margin-top:14px}
-</style>
-)";
-
 void startWiFi(bool forcePortal) {
   WiFiManager wm;
   wm.setConnectTimeout(20);
   wm.setConfigPortalTimeout(WIFI_TIMEOUT_S);
   wm.setSaveParamsCallback(onPortalSave);
-  wm.setCustomHeadElement(PORTAL_CSS);
   wm.setTitle("Jellybox Setup");
   wm.setShowInfoUpdate(false);
   wm_serverUrl = new WiFiManagerParameter("server", "Server URL", cfg.serverUrl.c_str(), 128, " placeholder=\"https://jellybox.example.com\"");
@@ -210,7 +180,6 @@ void doBootstrap() {
     appState = AppState::READY;
     led.setBaseState(LEDState::IDLE); led.setState(LEDState::IDLE);
     eink.showReady(deviceName);
-    checkCharging();
   }
 }
 
@@ -236,18 +205,6 @@ void handleScan(const String& uid) {
   }
 }
 
-void checkCharging() {
-  if (appState != AppState::READY) return;
-  bool charging = (digitalRead(PIN_CHRG)  == LOW);
-  bool charged  = (digitalRead(PIN_STDBY) == LOW);
-  LEDState target = charging ? LEDState::CHARGING : charged ? LEDState::CHARGED : LEDState::IDLE;
-  static LEDState lastChargeState = LEDState::IDLE;
-  if (target != lastChargeState) {
-    lastChargeState = target; led.setState(target);
-    Serial.printf("[Charge] %s\n", charging ? "charging" : charged ? "full" : "unplugged");
-  }
-}
-
 void checkFactoryReset() {
   if (digitalRead(PIN_FACTORY_RESET) == LOW) {
     if (!bootBtnHeld) { bootBtnHeld = true; bootBtnStart = millis(); Serial.println("[Reset] BOOT held..."); }
@@ -259,10 +216,8 @@ void checkFactoryReset() {
 
 void setup() {
   Serial.begin(115200); delay(100);
-  Serial.printf("\n\n=== Jellybox starting (firmware %s) ===\n", FIRMWARE_VERSION);
+  Serial.printf("\n\n=== Jellybox starting %s ===\n", FIRMWARE_VERSION);
   pinMode(PIN_FACTORY_RESET, INPUT_PULLUP);
-  pinMode(PIN_CHRG,          INPUT_PULLUP);
-  pinMode(PIN_STDBY,         INPUT_PULLUP);
   led.begin(); led.setState(LEDState::CONNECTING); led.update();
   eink.begin(); eink.showSplash(); eink.showConnecting();
   loadConfig();
@@ -290,8 +245,6 @@ void loop() {
   checkFactoryReset();
   led.update();
   if (millis() - lastBootstrap > BOOTSTRAP_INTERVAL_MS) { doBootstrap(); return; }
-  static unsigned long lastChargeCheck = 0;
-  if (millis() - lastChargeCheck > 5000) { lastChargeCheck = millis(); checkCharging(); }
   if (nfcReady && (appState == AppState::READY || appState == AppState::SCAN_MODE)) {
     String uid = nfc.readUID();
     if (uid.length() > 0) handleScan(uid);
