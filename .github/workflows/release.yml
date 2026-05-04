@@ -81,6 +81,8 @@ jobs:
           {
             "version": "${VERSION}",
             "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/jellybox-firmware-${VERSION}.bin",
+            "mergedUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/jellybox-firmware-${VERSION}.merged.bin",
+            "chipFamily": "ESP32",
             "sha256": "${SHA256}",
             "size": ${SIZE},
             "released_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
