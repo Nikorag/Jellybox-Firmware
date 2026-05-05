@@ -50,9 +50,15 @@ public:
     }
     uidStr.toUpperCase();
 
-    // Debounce: suppress repeats of the same UID within the window
+    // Debounce: suppress repeats of the same UID within the window.
+    // Refresh _lastScanTime on every continued sighting so a tag left on
+    // the antenna keeps extending its own suppression — only after the
+    // tag is actually removed (no detection) for SCAN_DEBOUNCE_MS will a
+    // re-presentation fire again.
     unsigned long now = millis();
     if (uidStr == _lastUID && (now - _lastScanTime) < SCAN_DEBOUNCE_MS) {
+      _lastScanTime = now;
+      _nfc.SAMConfig();  // re-arm so the next absent→present transition is seen
       return "";
     }
 

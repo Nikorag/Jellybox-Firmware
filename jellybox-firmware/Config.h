@@ -39,7 +39,7 @@
 
 // ── Timing ────────────────────────────────────────────────────────────────
 #define BOOTSTRAP_INTERVAL_MS  30000UL  // poll /api/device/me every 30 s
-#define SCAN_DEBOUNCE_MS        3000UL  // ignore same UID for 3 s
+#define SCAN_DEBOUNCE_MS       15000UL  // ignore same UID for 15 s
 #define FACTORY_RESET_HOLD_MS   3000UL  // hold BOOT 3 s → factory reset
 #define LED_UPDATE_INTERVAL_MS    20UL  // ~50 fps LED refresh
 
