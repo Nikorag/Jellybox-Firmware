@@ -37,6 +37,7 @@ public:
   BootstrapResult bootstrap() {
     BootstrapResult result;
     String url = _serverUrl + "/api/device/me";
+    Serial.printf("[API] bootstrap url=%s key=%s\n", url.c_str(), _apiKey.c_str());
 
     WiFiClientSecure client;
     client.setInsecure();  // no CA bundle on device — trust any cert
@@ -65,6 +66,9 @@ public:
           result.latestFirmwareVersion = fw["version"] | "";
           result.latestFirmwareUrl     = fw["url"]     | "";
         }
+        Serial.printf("[API] latestFirmware: version='%s' url='%s'\n",
+          result.latestFirmwareVersion.c_str(),
+          result.latestFirmwareUrl.c_str());
         result.ok       = true;
       } else {
         Serial.println("[API] bootstrap JSON error: " + String(err.c_str()));
