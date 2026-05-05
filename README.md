@@ -123,6 +123,7 @@ The 16-pixel NeoPixel ring indicates device state at a glance.
 
 | Colour / pattern | Meaning |
 |---|---|
+| Solid purple | Booting — shown during the blocking WiFi-connect phase in `setup()`, before the cooperative `loop()` takes over |
 | Blue breathing | Ready to scan — idle, waiting for a tag |
 | Cyan spin (comet) | Connecting — WiFi handshake or HTTP request in progress |
 | Yellow spin (comet) | Bootstrapping — contacting the server |
@@ -130,6 +131,7 @@ The 16-pixel NeoPixel ring indicates device state at a glance.
 | Green flash | Success — playback started, or tag captured |
 | Red flash | Error — check serial monitor for detail |
 | Amber breathing | Unpaired — no config, or API key rejected (401) |
+| Solid amber | Setup portal active — waiting for WiFi credentials (`loop()` is blocked, can't animate) |
 | Fast white breathing | Charging — battery is charging via USB |
 | Slow green breathing | Charged — battery is full |
 | Violet spin (comet) | Updating firmware — OTA download in progress |

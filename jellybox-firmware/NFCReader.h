@@ -59,6 +59,12 @@ public:
     _lastUID      = uidStr;
     _lastScanTime = now;
     Serial.println("[NFC] Tag: " + uidStr);
+
+    // Re-arm the PN532: after a successful InListPassiveTarget the chip keeps
+    // the previous target activated and won't detect a new one until SAMConfig
+    // is re-issued. Without this, only the first tag after boot ever scans.
+    _nfc.SAMConfig();
+
     return uidStr;
   }
 
