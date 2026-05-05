@@ -41,6 +41,8 @@ public:
 
     httpUpdate.rebootOnUpdate(true);
     httpUpdate.setLedPin(-1, LOW);
+    // GitHub release asset URLs 302 to a signed S3 URL — follow it.
+    httpUpdate.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
 
     t_httpUpdate_return ret = httpUpdate.update(client, url, FIRMWARE_VERSION);
 
