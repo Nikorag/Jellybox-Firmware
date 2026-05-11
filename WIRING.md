@@ -12,6 +12,7 @@ powers everything; the ESP32's onboard LDO steps that down to 3.3 V for the PN53
 |---|---|
 | MCU | ESP32 Dev Module (any board with GPIO0 BOOT button) |
 | Power | 5 V / 1 A TP4056 with protection + boost converter (dual-function, 4-pad module) |
+| Power switch | SPDT slide or toggle switch (any small switch rated ≥ 1 A) |
 | Battery | 18650 Li-Ion cell — see battery selection note below |
 | NFC reader | PN532 breakout (I2C mode) |
 | Display | Waveshare 2.9" V2 B/W eInk (296 × 128) |
@@ -83,13 +84,23 @@ USB (wall/PC)
   │  B+  ←→  18650 +  │
   │  B−  ←→  18650 −  │
   │                   │
-  │  OUT+ ──→ 5V rail │
-  │  OUT− ──→ GND     │
+  │  OUT+ ──→ [SPDT switch] ──→ 5V rail (ESP32 VIN, NeoPixel PWR)
+  │  OUT− ──────────────────────→ GND
   └───────────────────┘
 ```
 
-**Simultaneous charge and run:** this module supports pass-through — the device can run from
-the 5 V output while USB is connected and the battery is charging.
+**Power switch:** wire an **SPDT slide or toggle switch** in series between TP4056 `OUT+` and
+the ESP32 `VIN` pin (the same node that feeds NeoPixel `PWR`). Flipping the switch off
+completely disconnects the 5 V rail so the device draws no power from the cell — the only
+correct way to "turn the Jellybox off" between uses, since the firmware has no sleep mode yet.
+
+> **Switch the OUT+ side, not B+.** Wiring the switch between the cell and the TP4056 input
+> would also disconnect the charger, meaning the device couldn't charge over USB while
+> switched off. With the switch on `OUT+`, USB charging still works with the device powered
+> down.
+
+**Simultaneous charge and run:** this module supports pass-through — when the switch is on,
+the device can run from the 5 V output while USB is connected and the battery is charging.
 
 **Current headroom:** total worst-case draw is ~470 mA (see power budget below). The module is
 rated 1 A output, leaving ~530 mA headroom. Simultaneous WiFi TX + NFC field + full LED is
@@ -267,7 +278,7 @@ supplies the PN532 and eInk from its 3V3 pin.
        │          ┌─────────────────┤ B+  B−├──┐
        └──────────┤ USB    TP4056              │ │
                   │  5V boost module           │ │
-                  │         OUT+ ──────────────┼─┼──── 5V rail
+                  │         OUT+ ──[SPDT sw]───┼─┼──── 5V rail
                   │         OUT− ──────────────┼─┼──── GND rail
                   └────────────────────────────┘ │
                                                   │ (battery ground)

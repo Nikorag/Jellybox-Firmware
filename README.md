@@ -6,7 +6,7 @@
 
 ESP32 firmware for the Jellybox physical media player. Scan an RFID/NFC tag → instant playback on your Jellyfin server. No apps, no menus, no typing.
 
-This firmware talks to a [Jellybox Server](https://github.com/jamiebarltett/jellybox) instance. You need a server account and a paired device before the firmware does anything useful.
+This firmware talks to a [Jellybox Server](https://github.com/Nikorag/Jellybox-Server) instance. You need a server account and a paired device before the firmware does anything useful.
 
 ---
 
@@ -19,6 +19,7 @@ This firmware talks to a [Jellybox Server](https://github.com/jamiebarltett/jell
 | Display | Waveshare 2.9" V2 B/W eInk (296 × 128) |
 | LEDs | WS2812B NeoPixel ring — 16 pixels |
 | Power | TP4056 with protection + boost converter (4-pad dual-function module) |
+| Power switch | SPDT slide / toggle switch — wired in line between TP4056 `OUT+` and ESP32 `VIN` so the device can be turned off without disconnecting the battery |
 | Battery | 18650 Li-Ion cell, 2500–3500 mAh |
 
 See [WIRING.md](WIRING.md) for the full pinout, wiring diagrams, power budget, and component notes.
@@ -36,7 +37,7 @@ Install all of these via **Arduino IDE → Tools → Manage Libraries**:
 | Adafruit PN532 | Adafruit | 1.3 |
 | GxEPD2 | ZinggJM | 1.6 |
 | Adafruit GFX Library | Adafruit | 1.11 |
-| ArduinoJson | Benoit Blanchon | 7.0 (or 6.x — see `APIClient.h`) |
+| ArduinoJson | Benoit Blanchon | 7.0+ (uses v7 `JsonDocument` API — v6 needs code changes in `APIClient.h`) |
 
 ---
 
@@ -86,13 +87,15 @@ You can also trigger a factory reset during power-up: hold BOOT while connecting
 
 ## Over-the-Air Updates
 
-The device updates itself automatically. New firmware is published as a GitHub Release, the Jellybox Server picks up the manifest, and devices download and flash the new image on their next bootstrap (every 30 s).
+OTA is **user-triggered from the dashboard**, not automatic. Devices never flash themselves the moment a new release lands — you decide when each Jellybox restarts.
 
 **How it works**
 
 1. Each release tag (e.g. `v0.1.0`) triggers the GitHub Actions workflow in `.github/workflows/release.yml`. The workflow builds the firmware with the version baked in (`-DFIRMWARE_VERSION="v0.1.0"`), publishes a release with the `.bin` plus a `manifest.json`.
-2. The Jellybox Server fetches that manifest periodically and includes a `latestFirmware: { version, url }` block in every `GET /api/device/me` response.
-3. When the device sees a `version` that doesn't match its compiled-in `FIRMWARE_VERSION`, it shows the "Updating firmware" screen, downloads the binary directly from GitHub, flashes it, and reboots into the new image.
+2. The Jellybox Server fetches that manifest periodically. The device sends its currently-running version on every `GET /api/device/me` poll as a `?version=` query param.
+3. The server only includes a `latestFirmware: { version, url }` block in the response **after the user clicks "Update firmware"** in the dashboard, which sets the device's `firmwareUpdatePending` flag.
+4. When the device receives that block, it shows the "Updating firmware" screen, downloads the binary directly from GitHub, flashes it, and reboots into the new image.
+5. After reboot the device reports the new version on its next poll. The server compares it to the manifest version and clears the pending flag automatically.
 
 **Rollback safety**
 
@@ -227,7 +230,7 @@ Authenticated with `Authorization: Bearer <apiKey>`. Returns:
   }
 }
 ```
-A `401` response sets the device to UNPAIRED state. Other errors are retried on the next interval. The `latestFirmware` block is optional — if absent, no update is attempted. See the [OTA section](#over-the-air-updates) for the full update flow.
+A `401` response sets the device to UNPAIRED state. Other errors are retried on the next interval. The `latestFirmware` block is only present when the user has flagged the device for an update in the dashboard — otherwise it's omitted and the firmware treats that as "no update available". See the [OTA section](#over-the-air-updates) for the full update flow.
 
 **`POST /api/play`** — called when a tag is scanned  
 ```json
