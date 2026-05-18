@@ -42,6 +42,15 @@
 #define SCAN_DEBOUNCE_MS        3000UL  // ignore same UID for 3 s
 #define FACTORY_RESET_HOLD_MS   3000UL  // hold BOOT 3 s → factory reset
 #define LED_UPDATE_INTERVAL_MS    20UL  // ~50 fps LED refresh
+#define HEARTBEAT_INTERVAL_MS   5000UL  // UDP diagnostic heartbeat cadence
+
+// ── UDP debug logging ─────────────────────────────────────────────────────
+// Fire-and-forget logs to any machine on the LAN. Listen with:
+//   nc -u -l 5514
+//   socat -u UDP-LISTEN:5514,fork - | ts   (preferred — adds timestamps)
+// Override UDP_LOG_HOST to a specific IP if your AP filters broadcast.
+#define UDP_LOG_HOST   "255.255.255.255"
+#define UDP_LOG_PORT   5514
 
 // ── Device config (loaded from NVS) ───────────────────────────────────────
 struct DeviceConfig {

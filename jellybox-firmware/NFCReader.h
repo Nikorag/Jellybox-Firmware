@@ -32,6 +32,13 @@ public:
     return true;
   }
 
+  // I2C liveness probe — returns non-zero when the PN532 acks normally,
+  // zero when it isn't responding. Used by the diagnostic heartbeat to
+  // tell "chip is dead on the I2C bus" from "chip is alive but no longer
+  // detecting tags in the RF field" — the two failure modes look identical
+  // through readUID() alone.
+  uint32_t firmwareVersion() { return _nfc.getFirmwareVersion(); }
+
   // Returns a hex UID string when a tag is present, "" otherwise.
   // Blocks for up to 100 ms per call — keeps the main loop responsive
   // while giving the PN532 enough time to complete a detection cycle.

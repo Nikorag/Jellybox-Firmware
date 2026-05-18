@@ -25,14 +25,24 @@
 #include "NFCReader.h"
 #include "APIClient.h"
 #include "OTAUpdater.h"
+#include "UDPLogger.h"
 
 LEDRing     led;
 EInkDisplay eink;
 NFCReader   nfc;
 APIClient   api;
+UDPLogger   ulog;
 Preferences prefs;
 
 DeviceConfig cfg;
+
+// Diagnostic state for the UDP heartbeat. Tracks NFC liveness from the
+// main loop's perspective — readUID() returning "" looks the same whether
+// the PN532 is dead, the I2C bus is stuck, or there genuinely isn't a tag.
+unsigned long lastHeartbeat       = 0;
+unsigned long emptyReadsInWindow  = 0;
+unsigned long lastSuccessfulRead  = 0;
+String        lastSuccessfulUID   = "";
 
 enum class AppState {
   UNCONFIGURED,
@@ -123,12 +133,17 @@ void startWiFi(bool forcePortal) {
 }
 
 void doBootstrap() {
+  unsigned long t0 = millis();
+  ulog.logf("BOOT bootstrap_start heap=%u maxAlloc=%u",
+    (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
   led.setState(LEDState::BOOTSTRAPPING);
   led.setBaseState(LEDState::BOOTSTRAPPING);
   api.configure(cfg.serverUrl, cfg.apiKey);
   BootstrapResult res = api.bootstrap();
   lastBootstrap = millis();
   if (!res.ok) {
+    ulog.logf("BOOT bootstrap_fail http=%d took=%lums heap=%u",
+      res.httpCode, millis() - t0, (unsigned)ESP.getFreeHeap());
     if (res.httpCode == 401) {
       Serial.println("[Boot] 401 — invalid API key");
       eink.showUnpaired(); led.setState(LEDState::ERROR); led.setBaseState(LEDState::UNPAIRED);
@@ -181,9 +196,15 @@ void doBootstrap() {
     led.setBaseState(LEDState::IDLE); led.setState(LEDState::IDLE);
     eink.showReady(deviceName);
   }
+  ulog.logf("BOOT bootstrap_ok scanMode=%d took=%lums heap=%u maxAlloc=%u pn532=0x%08x",
+    (int)res.scanMode, millis() - t0,
+    (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap(),
+    (unsigned)(nfcReady ? nfc.firmwareVersion() : 0));
 }
 
 void handleScan(const String& uid) {
+  unsigned long t0 = millis();
+  ulog.logf("SCAN start uid=%s heap=%u", uid.c_str(), (unsigned)ESP.getFreeHeap());
   led.setState(LEDState::CONNECTING); led.update();
   PlayResult res = api.play(uid);
   if (res.ok) {
@@ -203,6 +224,10 @@ void handleScan(const String& uid) {
     while (millis() - wait < 3000) { led.update(); checkFactoryReset(); delay(10); }
     appState == AppState::SCAN_MODE ? eink.showScanMode(deviceName) : eink.showReady(deviceName);
   }
+  ulog.logf("SCAN end ok=%d captured=%d http=%d content='%s' err='%s' took=%lums heap=%u",
+    (int)res.ok, (int)res.captured, res.httpCode,
+    res.content.c_str(), res.error.c_str(), millis() - t0,
+    (unsigned)ESP.getFreeHeap());
 }
 
 void checkFactoryReset() {
@@ -232,6 +257,11 @@ void setup() {
   if (!nfcReady) Serial.println("[NFC] Reader not found — NFC disabled");
   bool needPortal = cfg.serverUrl.isEmpty() || cfg.apiKey.isEmpty();
   startWiFi(needPortal);
+  ulog.begin(UDP_LOG_HOST, UDP_LOG_PORT);
+  ulog.logf("BOOT fw=%s ip=%s ssid=%s heap=%u nfc=%d pn532=0x%08x",
+    FIRMWARE_VERSION, WiFi.localIP().toString().c_str(),
+    WiFi.SSID().c_str(), (unsigned)ESP.getFreeHeap(),
+    (int)nfcReady, (unsigned)(nfcReady ? nfc.firmwareVersion() : 0));
   loadConfig();
   if (cfg.serverUrl.isEmpty() || cfg.apiKey.isEmpty()) {
     Serial.println("[Config] Incomplete — waiting for reset");
@@ -247,7 +277,29 @@ void loop() {
   if (millis() - lastBootstrap > BOOTSTRAP_INTERVAL_MS) { doBootstrap(); return; }
   if (nfcReady && (appState == AppState::READY || appState == AppState::SCAN_MODE)) {
     String uid = nfc.readUID();
-    if (uid.length() > 0) handleScan(uid);
+    if (uid.length() > 0) {
+      lastSuccessfulRead = millis();
+      lastSuccessfulUID  = uid;
+      handleScan(uid);
+    } else {
+      emptyReadsInWindow++;
+    }
   }
+
+  // pn532 firmware-version probe distinguishes "I2C/chip dead" from
+  // "chip alive, RF detection broken" — same UDP packet either way.
+  if (millis() - lastHeartbeat > HEARTBEAT_INTERVAL_MS) {
+    lastHeartbeat = millis();
+    uint32_t fw = nfcReady ? nfc.firmwareVersion() : 0;
+    unsigned long ageS = (lastSuccessfulRead == 0)
+      ? 0 : (millis() - lastSuccessfulRead) / 1000;
+    ulog.logf("HB state=%d heap=%u maxAlloc=%u empty=%lu lastUID=%s ageS=%lu pn532=0x%08x wifi=%d",
+      (int)appState, (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap(),
+      emptyReadsInWindow,
+      lastSuccessfulUID.length() ? lastSuccessfulUID.c_str() : "-",
+      ageS, (unsigned)fw, (int)WiFi.status());
+    emptyReadsInWindow = 0;
+  }
+
   delay(10);
 }
