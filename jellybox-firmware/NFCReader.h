@@ -28,6 +28,7 @@ public:
     Serial.printf("[NFC] PN532 firmware v%d.%d\n", (ver >> 16) & 0xFF, (ver >> 8) & 0xFF);
     // No setPassiveActivationRetries — let the PN532 use its default behaviour.
     // Setting 0xFF with a timeout caused the detection cycle to outrun the timeout.
+    _nfc.inRelease(0);
     _nfc.SAMConfig();
     return true;
   }
@@ -39,13 +40,17 @@ public:
   // through readUID() alone.
   uint32_t firmwareVersion() { return _nfc.getFirmwareVersion(); }
 
-  // Re-arm passive detection by re-running SAMConfig. Use after the loop
-  // has done something that disturbs the chip's RF/Vcc environment — a
-  // TLS handshake, an eInk full-window refresh, an OTA download — any of
-  // which can leave the PN532 alive on I2C but no longer responding to
-  // InListPassiveTarget. readUID() already does this after each successful
-  // read; this is the recovery hook for the no-recent-read case.
-  void rearm() { _nfc.SAMConfig(); }
+  // Re-arm passive detection after the loop has done something that
+  // disturbs the chip's RF/Vcc environment — a TLS handshake, an eInk
+  // full-window refresh, an OTA download. inRelease() clears the library's
+  // own _inListedTag flag (which SAMConfig alone leaves set, causing
+  // subsequent readPassiveTargetID() calls to short-circuit and return
+  // false even though the chip itself is fine). SAMConfig then puts the
+  // chip back into a known passive-listen state.
+  void rearm() {
+    _nfc.inRelease(0);
+    _nfc.SAMConfig();
+  }
 
   // Returns a hex UID string when a tag is present, "" otherwise.
   // Blocks for up to 100 ms per call — keeps the main loop responsive
@@ -73,6 +78,7 @@ public:
     unsigned long now = millis();
     if (uidStr == _lastUID && (now - _lastScanTime) < SCAN_DEBOUNCE_MS) {
       _lastScanTime = now;
+      _nfc.inRelease(0);
       _nfc.SAMConfig();  // re-arm so the next absent→present transition is seen
       return "";
     }
@@ -84,6 +90,7 @@ public:
     // Re-arm the PN532: after a successful InListPassiveTarget the chip keeps
     // the previous target activated and won't detect a new one until SAMConfig
     // is re-issued. Without this, only the first tag after boot ever scans.
+    _nfc.inRelease(0);
     _nfc.SAMConfig();
 
     return uidStr;

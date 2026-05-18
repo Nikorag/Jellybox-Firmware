@@ -311,6 +311,13 @@ void loop() {
       lastSuccessfulUID.length() ? lastSuccessfulUID.c_str() : "-",
       ageS, (unsigned)fw, (int)WiFi.status());
     emptyReadsInWindow = 0;
+    // Preemptive rearm every heartbeat. The chip's passive-detect state
+    // can wedge silently after RF/Vcc transients with no observable
+    // symptom from outside — getFirmwareVersion still works, only
+    // readPassiveTargetID stops returning hits. Two I2C transactions per
+    // 5 s is cheap; doing this unconditionally covers both the
+    // post-scan wedge and the boot wedge (chip flaky from cold start).
+    if (nfcReady && fw != 0) nfc.rearm();
   }
 
   delay(10);
