@@ -196,6 +196,10 @@ void doBootstrap() {
     led.setBaseState(LEDState::IDLE); led.setState(LEDState::IDLE);
     eink.showReady(deviceName);
   }
+  // HTTPS handshake + eInk full-window refresh can wedge the PN532's
+  // passive-target state machine while leaving I2C alive — re-arm before
+  // returning so the next readUID() actually detects tags.
+  if (nfcReady) nfc.rearm();
   ulog.logf("BOOT bootstrap_ok scanMode=%d took=%lums heap=%u maxAlloc=%u pn532=0x%08x",
     (int)res.scanMode, millis() - t0,
     (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap(),
@@ -286,6 +290,9 @@ void loop() {
       lastSuccessfulRead = millis();
       lastSuccessfulUID  = uid;
       handleScan(uid);
+      // handleScan ran HTTPS + 1–2 eInk full refreshes; same wedge risk
+      // as doBootstrap, same fix.
+      nfc.rearm();
     } else {
       emptyReadsInWindow++;
     }

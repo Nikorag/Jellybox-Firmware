@@ -38,8 +38,10 @@ public:
     va_start(args, fmt);
     vsnprintf(buf + n, sizeof(buf) - n, fmt, args);
     va_end(args);
+    size_t len = strlen(buf);
+    if (len < sizeof(buf) - 1) buf[len++] = '\n';
     _udp.beginPacket(_host, _port);
-    _udp.write((const uint8_t*)buf, strlen(buf));
+    _udp.write((const uint8_t*)buf, len);
     _udp.endPacket();
   }
 

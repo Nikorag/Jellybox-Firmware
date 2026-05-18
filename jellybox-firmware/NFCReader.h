@@ -39,6 +39,14 @@ public:
   // through readUID() alone.
   uint32_t firmwareVersion() { return _nfc.getFirmwareVersion(); }
 
+  // Re-arm passive detection by re-running SAMConfig. Use after the loop
+  // has done something that disturbs the chip's RF/Vcc environment — a
+  // TLS handshake, an eInk full-window refresh, an OTA download — any of
+  // which can leave the PN532 alive on I2C but no longer responding to
+  // InListPassiveTarget. readUID() already does this after each successful
+  // read; this is the recovery hook for the no-recent-read case.
+  void rearm() { _nfc.SAMConfig(); }
+
   // Returns a hex UID string when a tag is present, "" otherwise.
   // Blocks for up to 100 ms per call — keeps the main loop responsive
   // while giving the PN532 enough time to complete a detection cycle.
