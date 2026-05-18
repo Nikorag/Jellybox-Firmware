@@ -76,7 +76,7 @@ public:
       } else {
         _centre("Connecting...", &FreeMono9pt7b, 75);
       }
-      _centre((String("fw ") + FIRMWARE_VERSION).c_str(), nullptr, 122);
+      _centre((String("fw ") + FIRMWARE_VERSION).c_str(), nullptr, 115);
     });
   }
 

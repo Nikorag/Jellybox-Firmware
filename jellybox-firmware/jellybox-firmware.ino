@@ -123,7 +123,7 @@ void startWiFi(bool forcePortal) {
     });
   });
   bool connected = forcePortal
-    ? (eink.showUnpaired(), led.setState(LEDState::UNPAIRED), led.setBaseState(LEDState::UNPAIRED), wm.startConfigPortal(WIFI_AP_NAME, WIFI_AP_PASSWORD))
+    ? (eink.showUnpaired(), led.setState(LEDState::SETUP_PORTAL), led.setBaseState(LEDState::UNPAIRED), led.update(), wm.startConfigPortal(WIFI_AP_NAME, WIFI_AP_PASSWORD))
     : wm.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD);
   delete wm_serverUrl; wm_serverUrl = nullptr;
   delete wm_apiKey;    wm_apiKey    = nullptr;
@@ -243,7 +243,12 @@ void setup() {
   Serial.begin(115200); delay(100);
   Serial.printf("\n\n=== Jellybox starting %s ===\n", FIRMWARE_VERSION);
   pinMode(PIN_FACTORY_RESET, INPUT_PULLUP);
-  led.begin(); led.setState(LEDState::CONNECTING); led.update();
+  led.begin(); led.setState(LEDState::BOOTING); led.update();
+  // Pre-set eInk control pins as outputs at idle level so GxEPD2's init()
+  // doesn't trip the "digitalWrite before pinMode" warning on ESP32 core 3.x.
+  pinMode(PIN_EINK_CS,  OUTPUT); digitalWrite(PIN_EINK_CS,  HIGH);
+  pinMode(PIN_EINK_DC,  OUTPUT); digitalWrite(PIN_EINK_DC,  HIGH);
+  pinMode(PIN_EINK_RST, OUTPUT); digitalWrite(PIN_EINK_RST, HIGH);
   eink.begin(); eink.showSplash(); eink.showConnecting();
   loadConfig();
   { unsigned long h = millis();

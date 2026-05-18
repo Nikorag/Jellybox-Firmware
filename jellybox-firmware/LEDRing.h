@@ -5,6 +5,7 @@
 
 enum class LEDState {
   OFF,
+  BOOTING,       // solid purple — booting / blocking WiFi connect (no animation pump)
   IDLE,          // slow blue-white breathing — ready to scan
   CONNECTING,    // spinning cyan — WiFi / HTTP in progress
   BOOTSTRAPPING, // spinning yellow — contacting server
@@ -12,6 +13,7 @@ enum class LEDState {
   SUCCESS,       // flash green — play confirmed / tag captured
   ERROR,         // flash red — something went wrong
   UNPAIRED,      // slow amber breathing — no config / 401 from server
+  SETUP_PORTAL,  // solid amber — config portal is up (loop() is blocked, can't animate)
   UPDATING,      // slow purple/blue pulse — OTA firmware update in progress
 };
 
@@ -63,6 +65,7 @@ public:
 
     switch (_currentState) {
       case LEDState::OFF:          _fill(0, 0, 0);              break;
+      case LEDState::BOOTING:      _fill(60, 0, 90);            break;  // solid purple — used while loop() is blocked
       case LEDState::IDLE:         _breathe(40, 80, 220);       break;  // blue-white, 4 s
       case LEDState::CONNECTING:   _spin(0, 220, 220);          break;  // cyan
       case LEDState::BOOTSTRAPPING:_spin(220, 180, 0);          break;  // yellow
@@ -70,6 +73,7 @@ public:
       case LEDState::SUCCESS:      _fill(0, 200, 60);           break;  // green flash
       case LEDState::ERROR:        _fill(200, 0, 0);            break;  // red flash
       case LEDState::UNPAIRED:     _breathe(255, 110, 0);       break;  // amber, 4 s
+      case LEDState::SETUP_PORTAL: _fill(255, 110, 0);          break;  // solid amber — used while portal blocks loop()
       case LEDState::UPDATING:     _spin(120, 60, 240);         break;  // violet comet
     }
 
