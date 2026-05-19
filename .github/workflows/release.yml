@@ -9,8 +9,15 @@ permissions:
   contents: write
 
 jobs:
+  # One build per hardware SKU. Add a SKU by extending matrix.sku — the rest
+  # of the pipeline parameterises over ${{ matrix.sku }}. The server consumes
+  # the combined manifest.json produced by the `publish` job.
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sku: [jb-eink-v1]
     steps:
       - uses: actions/checkout@v4
 
@@ -35,7 +42,7 @@ jobs:
             "Adafruit GFX Library@1.11.0" \
             "ArduinoJson@7.0.0"
 
-      - name: Compile firmware
+      - name: Compile firmware (${{ matrix.sku }})
         run: |
           mkdir -p build
           VERSION="${GITHUB_REF_NAME:-dev}"
@@ -43,7 +50,7 @@ jobs:
             --fqbn esp32:esp32:esp32:PartitionScheme=min_spiffs \
             --output-dir build \
             --export-binaries \
-            --build-property "build.extra_flags=-DFIRMWARE_VERSION=\"${VERSION}\" -DESP32" \
+            --build-property "build.extra_flags=-DFIRMWARE_VERSION=\"${VERSION}\" -DJELLYBOX_SKU=\"${{ matrix.sku }}\" -DESP32" \
             ./jellybox-firmware
 
       - name: Check OTA partition fit
@@ -51,13 +58,13 @@ jobs:
           SIZE=$(stat -c '%s' build/jellybox-firmware.ino.bin)
           MAX=1966080
           PCT=$((SIZE * 100 / MAX))
-          echo "Binary: $SIZE bytes ($PCT% of OTA partition)"
+          echo "[${{ matrix.sku }}] Binary: $SIZE bytes ($PCT% of OTA partition)"
           if [ $SIZE -gt $MAX ]; then
-            echo "::error::Binary ($SIZE bytes) exceeds OTA partition size ($MAX bytes)!"
+            echo "::error::[${{ matrix.sku }}] Binary ($SIZE bytes) exceeds OTA partition size ($MAX bytes)!"
             exit 1
           fi
           if [ $PCT -gt 85 ]; then
-            echo "::warning::Binary is over 85% of OTA partition — consider a custom partition scheme"
+            echo "::warning::[${{ matrix.sku }}] Binary is over 85% of OTA partition — consider a custom partition scheme"
           fi
 
       - name: Rename artifacts
@@ -66,46 +73,79 @@ jobs:
           cd build
           for f in jellybox-firmware.ino.*; do
             suffix="${f#jellybox-firmware.ino.}"
-            mv "$f" "jellybox-firmware-${VERSION}.${suffix}"
+            mv "$f" "jellybox-firmware-${{ matrix.sku }}-${VERSION}.${suffix}"
           done
           ls -la
 
-      - name: Generate release manifest
+      - name: Generate per-SKU manifest fragment
         run: |
           VERSION="${GITHUB_REF_NAME:-dev}"
-          BIN_FILE="build/jellybox-firmware-${VERSION}.bin"
+          SKU="${{ matrix.sku }}"
+          BIN_FILE="build/jellybox-firmware-${SKU}-${VERSION}.bin"
           SHA256=$(sha256sum "$BIN_FILE" | awk '{print $1}')
           SIZE=$(stat -c '%s' "$BIN_FILE")
-          
-          cat > build/manifest.json <<EOF
+
+          cat > build/manifest-${SKU}.json <<EOF
           {
-            "version": "${VERSION}",
-            "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/jellybox-firmware-${VERSION}.bin",
-            "mergedUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/jellybox-firmware-${VERSION}.merged.bin",
+            "sku": "${SKU}",
             "chipFamily": "ESP32",
+            "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/jellybox-firmware-${SKU}-${VERSION}.bin",
+            "mergedUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/jellybox-firmware-${SKU}-${VERSION}.merged.bin",
             "sha256": "${SHA256}",
-            "size": ${SIZE},
-            "released_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            "size": ${SIZE}
           }
           EOF
-          cat build/manifest.json
+          cat build/manifest-${SKU}.json
 
-      - name: Upload artifacts
+      - name: Upload per-SKU build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jellybox-firmware-${{ matrix.sku }}
+          path: |
+            build/jellybox-firmware-${{ matrix.sku }}-*.bin
+            build/jellybox-firmware-${{ matrix.sku }}-*.elf
+            build/manifest-${{ matrix.sku }}.json
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all SKU artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jellybox-firmware-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Combine SKU manifests into manifest.json
+        run: |
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          RELEASED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Combine each manifest-<sku>.json fragment into one builds[] array.
+          BUILDS=$(jq -s '.' artifacts/manifest-*.json)
+          jq -n \
+            --arg version "${VERSION}" \
+            --arg released_at "${RELEASED_AT}" \
+            --argjson builds "${BUILDS}" \
+            '{version: $version, released_at: $released_at, builds: $builds}' \
+            > artifacts/manifest.json
+          cat artifacts/manifest.json
+
+      - name: Upload combined release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: jellybox-firmware
           path: |
-            build/*.bin
-            build/*.elf
-            build/manifest.json
+            artifacts/*.bin
+            artifacts/*.elf
+            artifacts/manifest.json
 
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/*.bin
-            build/*.elf
-            build/manifest.json
+            artifacts/*.bin
+            artifacts/*.elf
+            artifacts/manifest.json
           generate_release_notes: true
-

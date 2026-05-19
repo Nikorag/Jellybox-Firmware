@@ -7,6 +7,16 @@
 #define FIRMWARE_VERSION "dev"
 #endif
 
+// ── Hardware SKU ──────────────────────────────────────────────────────────
+// Identifies the hardware variant this build targets. Injected at build time
+// via -DJELLYBOX_SKU="jb-...-vN" by the release workflow's matrix. Devices
+// report this to the server so it can offer the right OTA build and tell
+// hardware variants apart on the dashboard. See apps/server/src/lib/skus.ts
+// for the canonical registry.
+#ifndef JELLYBOX_SKU
+#define JELLYBOX_SKU "jb-eink-v1"
+#endif
+
 // ── Pin definitions ───────────────────────────────────────────────────────
 
 // NeoPixel ring
