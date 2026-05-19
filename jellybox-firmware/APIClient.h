@@ -36,7 +36,8 @@ public:
   // GET /api/device/me — called on boot and every BOOTSTRAP_INTERVAL_MS
   BootstrapResult bootstrap() {
     BootstrapResult result;
-    String url = _serverUrl + "/api/device/me?version=" + String(FIRMWARE_VERSION);
+    String url = _serverUrl + "/api/device/me?version=" + String(FIRMWARE_VERSION)
+                 + "&sku=" + String(JELLYBOX_SKU);
     Serial.printf("[API] bootstrap url=%s key=%s\n", url.c_str(), _apiKey.c_str());
 
     WiFiClientSecure client;
