@@ -21,18 +21,49 @@
 
 #include "Config.h"
 #include "LEDRing.h"
-#include "EInkDisplay.h"
+#ifdef JELLYBOX_DISPLAY_TFT
+  #include "TFTDisplay.h"
+#else
+  #include "EInkDisplay.h"
+#endif
 #include "NFCReader.h"
 #include "APIClient.h"
 #include "OTAUpdater.h"
 #include "UDPLogger.h"
+#ifdef JELLYBOX_HAS_AUDIO
+  #include "AudioFeedback.h"
+#endif
+#ifdef JELLYBOX_HAS_VOLUME_DIAL
+  #include "VolumeControl.h"
+#endif
 
 LEDRing     led;
+#ifdef JELLYBOX_DISPLAY_TFT
+TFTDisplay  eink;   // variable name unchanged so existing call sites work as-is
+#else
 EInkDisplay eink;
+#endif
 NFCReader   nfc;
 APIClient   api;
 UDPLogger   ulog;
 Preferences prefs;
+#ifdef JELLYBOX_HAS_AUDIO
+AudioFeedback audio;
+#endif
+#ifdef JELLYBOX_HAS_VOLUME_DIAL
+VolumeControl volume;
+#endif
+
+// Returns the current audio gain (0.0–1.0). Uses the volume dial when
+// compiled in, otherwise a sensible fixed level so the speaker isn't
+// deafening on boards without a dial.
+static inline float audioGain() {
+#ifdef JELLYBOX_HAS_VOLUME_DIAL
+  return volume.gain();
+#else
+  return 0.6f;
+#endif
+}
 
 DeviceConfig cfg;
 
@@ -216,14 +247,23 @@ void handleScan(const String& uid) {
     if (res.captured) {
       Serial.println("[Play] Tag captured: " + uid);
       eink.showReady(deviceName); lastBootstrap = 0;
+#ifdef JELLYBOX_HAS_AUDIO
+      audio.playImported(audioGain());
+#endif
     } else {
       Serial.println("[Play] Playing: " + res.content);
       eink.showLastPlayed(deviceName, res.content);
+#ifdef JELLYBOX_HAS_AUDIO
+      audio.playSuccess(audioGain());
+#endif
     }
   } else {
     Serial.println("[Play] Error: " + res.error);
     led.setState(LEDState::ERROR);
     eink.showError(res.error.isEmpty() ? "Play failed" : res.error);
+#ifdef JELLYBOX_HAS_AUDIO
+    audio.playError(audioGain());
+#endif
     unsigned long wait = millis();
     while (millis() - wait < 3000) { led.update(); checkFactoryReset(); delay(10); }
     appState == AppState::SCAN_MODE ? eink.showScanMode(deviceName) : eink.showReady(deviceName);
@@ -248,12 +288,22 @@ void setup() {
   Serial.printf("\n\n=== Jellybox starting %s ===\n", FIRMWARE_VERSION);
   pinMode(PIN_FACTORY_RESET, INPUT_PULLUP);
   led.begin(); led.setState(LEDState::BOOTING); led.update();
+#ifdef JELLYBOX_DISPLAY_EINK
   // Pre-set eInk control pins as outputs at idle level so GxEPD2's init()
   // doesn't trip the "digitalWrite before pinMode" warning on ESP32 core 3.x.
   pinMode(PIN_EINK_CS,  OUTPUT); digitalWrite(PIN_EINK_CS,  HIGH);
   pinMode(PIN_EINK_DC,  OUTPUT); digitalWrite(PIN_EINK_DC,  HIGH);
   pinMode(PIN_EINK_RST, OUTPUT); digitalWrite(PIN_EINK_RST, HIGH);
+#endif
+#ifdef JELLYBOX_DISPLAY_TFT
+  pinMode(PIN_TFT_CS,  OUTPUT); digitalWrite(PIN_TFT_CS,  HIGH);
+  pinMode(PIN_TFT_DC,  OUTPUT); digitalWrite(PIN_TFT_DC,  HIGH);
+  pinMode(PIN_TFT_RST, OUTPUT); digitalWrite(PIN_TFT_RST, HIGH);
+#endif
   eink.begin(); eink.showSplash(); eink.showConnecting();
+#ifdef JELLYBOX_HAS_VOLUME_DIAL
+  volume.begin();
+#endif
   loadConfig();
   { unsigned long h = millis();
     while (digitalRead(PIN_FACTORY_RESET) == LOW) {
@@ -267,6 +317,9 @@ void setup() {
   bool needPortal = cfg.serverUrl.isEmpty() || cfg.apiKey.isEmpty();
   startWiFi(needPortal);
   ulog.begin(UDP_LOG_HOST, UDP_LOG_PORT);
+#ifdef JELLYBOX_HAS_AUDIO
+  audio.begin();
+#endif
   ulog.logf("BOOT fw=%s ip=%s ssid=%s heap=%u nfc=%d pn532=0x%08x",
     FIRMWARE_VERSION, WiFi.localIP().toString().c_str(),
     WiFi.SSID().c_str(), (unsigned)ESP.getFreeHeap(),
@@ -283,6 +336,9 @@ void setup() {
 void loop() {
   checkFactoryReset();
   led.update();
+#ifdef JELLYBOX_HAS_VOLUME_DIAL
+  volume.update();
+#endif
   if (millis() - lastBootstrap > BOOTSTRAP_INTERVAL_MS) { doBootstrap(); return; }
   if (nfcReady && (appState == AppState::READY || appState == AppState::SCAN_MODE)) {
     String uid = nfc.readUID();
